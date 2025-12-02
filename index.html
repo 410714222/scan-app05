@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Excel 盤點系統</title>
+    <title>盤點</title>
     
     <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
     <script src="https://unpkg.com/@ericblade/quagga2@1.8.4/dist/quagga.min.js"></script>
@@ -11,105 +11,158 @@
     <style>
         body { 
             font-family: -apple-system, BlinkMacSystemFont, "Microsoft JhengHei", Roboto, sans-serif; 
-            padding: 10px; padding-top: 40px; background-color: #f0f2f5; margin: 0;
+            padding: 10px; 
+            background-color: #f4f5f7; 
+            margin: 0;
             -webkit-overflow-scrolling: touch; 
         }
 
-        /* 頂部導覽列 */
-        .top-bar {
-            position: fixed; top: 0; left: 0; width: 100%; height: 45px;
-            background-color: #fff; box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-            display: flex; justify-content: space-between; align-items: center;
-            padding: 0 15px; z-index: 1000;
-        }
-        .top-bar h1 { font-size: 0.8em; margin: 0; color: #333; }
-        .btn-export {
-            background-color: #17a2b8; color: white; border: none; padding: 8px 12px;
-            border-radius: 5px; font-size: 0.9em; cursor: pointer;
+        /* 通用面板樣式 (更緊湊) */
+        .compact-panel { 
+            background: white; 
+            padding: 10px; 
+            border-radius: 8px; 
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1); 
+            margin-bottom: 10px; 
         }
 
-        .control-panel { 
-            background: white; padding: 15px; border-radius: 12px; 
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1); margin-bottom: 5px; 
+        /* 彈性佈局列 (用於並排按鈕) */
+        .flex-row {
+            display: flex;
+            gap: 8px;
+            align-items: center;
         }
-        h2 { margin-top: 0; font-size: 0.7em; color: #666; border-bottom: 1px solid #eee; padding-bottom: 5px; margin-bottom: 7px;}
-
-        /* 表格區 */
-        #tableContainer {
-            overflow-x: auto; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-            background: white; max-height: 55vh; overflow-y: auto;
-        }
-        table { width: 100%; border-collapse: collapse; white-space: nowrap; }
-        th, td { border: 1px solid #eee; padding: 12px 10px; text-align: center; font-size: 14px; }
-        th { background-color: #007bff; color: white; position: sticky; top: 0; z-index: 10; }
         
-        td:nth-child(3) { font-weight: bold; color: #007bff; } 
-        td:nth-child(4) { font-weight: bold; color: #28a745; background-color: #f9fff9; }
-
-        /* 輸入與按鈕 */
-        input[type="text"], input[type="file"] { 
-            padding: 10px; border: 1px solid #ccc; border-radius: 6px; width: 100%; 
-            box-sizing: border-box; margin-bottom: 10px; font-size: 16px; 
+        /* 檔案控制按鈕 */
+        .btn-file {
+            flex: 1;
+            padding: 10px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+            color: white;
+            text-align: center;
         }
-        .btn-action { 
-            padding: 12px; background-color: #28a745; color: white; border: none; 
-            border-radius: 8px; cursor: pointer; font-size: 16px; width: 100%; margin-bottom: 8px; 
-        }
-        #toggleCameraBtn { background-color: #6c757d; }
-        
-        .status-box { padding: 15px; font-weight: bold; border-radius: 8px; text-align: center; margin-top: 10px; display: none; }
-        .bg-gray { background-color: #d3d3d3 !important; color: #555; }
-        .bg-red { background-color: #ffebee !important; color: #c62828; }
-        .bg-yellow { background-color: #fffde7 !important; color: #f57f17; }
+        #btn-import-trigger { background-color: #28a745; } /* 綠色 */
+        #btn-export { background-color: #17a2b8; } /* 藍綠色 */
 
-        /* --- Quagga 掃描視窗 CSS 修改重點 --- */
+        /* 相機按鈕 */
+        #toggleCameraBtn {
+            width: 100%;
+            padding: 10px;
+            background-color: #6c757d;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            margin-bottom: 8px;
+            cursor: pointer;
+        }
+
+        /* 輸入區塊佈局 */
+        .input-group {
+            display: flex;
+            gap: 5px;
+        }
+        #scanInput {
+            flex: 1; /* 佔據剩餘空間 */
+            padding: 8px 10px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            font-size: 16px;
+            height: 40px; /* 固定高度 */
+            box-sizing: border-box;
+        }
+        #checkBtn {
+            width: 80px; /* 固定寬度 */
+            height: 40px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            cursor: pointer;
+        }
+
+        /* 狀態顯示 (更精簡) */
+        .status-box { 
+            padding: 8px; 
+            font-weight: bold; 
+            border-radius: 6px; 
+            text-align: center; 
+            margin-top: 8px; 
+            font-size: 14px;
+            display: none; 
+        }
+        .bg-gray { background-color: #e0e0e0; color: #555; }
+        .bg-red { background-color: #ffebee; color: #c62828; }
+        .bg-yellow { background-color: #fffde7; color: #f57f17; }
+
+        /* 相機視窗 (高度維持縮小) */
         #interactive.viewport {
             position: relative; 
             width: 100%; 
-            height: 180px; /* 固定高度，縮小視窗 */
-            overflow: hidden; /* 隱藏溢出的影像 */
-            text-align: center; 
-            display: none; 
-            margin-bottom: 10px;
+            height: 180px; 
+            overflow: hidden; 
             background: #000; 
-            border-radius: 8px;
+            border-radius: 6px;
+            margin-bottom: 8px;
+            display: none;
         }
-        /* 讓影片垂直水平置中，保持畫面中心可見 */
         #interactive.viewport > video, #interactive.viewport > canvas {
-            position: absolute;
-            top: 50%;
-            left: 50%;
+            position: absolute; top: 50%; left: 50%;
             transform: translate(-50%, -50%);
-            min-width: 100%;
-            min-height: 100%;
-            width: auto;
-            height: auto;
+            min-width: 100%; min-height: 100%; width: auto; height: auto;
         }
+
+        /* 表格優化 */
+        #tableContainer {
+            overflow-x: auto; 
+            background: white; 
+            border-radius: 8px; 
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            /* 自動計算高度：螢幕高度 - 上方區塊大約高度 */
+            height: calc(100vh - 190px); 
+            overflow-y: auto;
+        }
+        table { width: 100%; border-collapse: collapse; white-space: nowrap; }
+        th, td { border: 1px solid #eee; padding: 10px 8px; text-align: center; font-size: 14px; }
+        th { background-color: #007bff; color: white; position: sticky; top: 0; z-index: 10; }
+        td:nth-child(3) { font-weight: bold; color: #007bff; } 
+        td:nth-child(4) { font-weight: bold; color: #28a745; background-color: #f9fff9; }
+
+        /* 隱藏真實的 file input */
+        #fileInput { display: none; }
     </style>
 </head>
 <body>
 
-    <div class="top-bar">
-        <h1>📦 盤點系統</h1>
-        <button id="exportBtn" class="btn-export">匯出</button>
+    <div class="compact-panel">
+        <div class="flex-row">
+            <input type="file" id="fileInput" accept=".xlsx, .xls" />
+            
+            <button id="btn-import-trigger" class="btn-file" onclick="document.getElementById('fileInput').click();">
+                📂 匯入 Excel
+            </button>
+            <button id="btn-export" class="btn-file">
+                ⬇ 匯出
+            </button>
+        </div>
+        <div id="importMsg" style="font-size: 12px; color: #666; margin-top: 5px; text-align: center; display: none;"></div>
     </div>
 
-    <div class="control-panel">
-       
-        <input type="file" id="fileInput" accept=".xlsx, .xls" />
-        <button id="importBtn" class="btn-action">匯入表格</button>
-        <p style="font-size: 0.8em; color: #888;"></p>
-    </div>
-
-    <div class="control-panel">
-       
-        
-        <button id="toggleCameraBtn" class="btn-action">📷 開啟相機</button>
+    <div class="compact-panel">
+        <button id="toggleCameraBtn">📷 開啟相機</button>
         
         <div id="interactive" class="viewport"></div>
 
-        <input type="text" id="scanInput" placeholder="編號" inputmode="text" />
-        <button id="checkBtn" class="btn-action">核對</button>
+        <div class="input-group">
+            <input type="text" id="scanInput" placeholder="輸入編號..." inputmode="text" />
+            <button id="checkBtn">核對</button>
+        </div>
+        
         <div id="resultMessage" class="status-box"></div>
     </div>
 
@@ -121,8 +174,8 @@
         let lastScannedCode = "";
         let lastScannedTime = 0;
 
-        // 1. 匯出
-        document.getElementById('exportBtn').addEventListener('click', function() {
+        // --- 匯出功能 ---
+        document.getElementById('btn-export').addEventListener('click', function() {
             const table = document.getElementById('dataTable');
             if (!table) { alert("無資料"); return; }
             const now = new Date();
@@ -131,11 +184,11 @@
             XLSX.writeFile(wb, `盤點_${timeStr}.xlsx`);
         });
 
-        // 2. 匯入
-        document.getElementById('importBtn').addEventListener('click', function() {
-            const fileInput = document.getElementById('fileInput');
-            const file = fileInput.files[0];
-            if (!file) { alert("請選擇檔案"); return; }
+        // --- 匯入功能 (監聽隱藏的 file input) ---
+        document.getElementById('fileInput').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
             const reader = new FileReader();
             reader.onload = function(e) {
                 const data = new Uint8Array(e.target.result);
@@ -143,9 +196,15 @@
                 const worksheet = workbook.Sheets[workbook.SheetNames[0]];
                 excelData = XLSX.utils.sheet_to_json(worksheet, {header: 1});
                 renderTable(excelData);
-                showStatus("匯入成功", "bg-yellow");
+                
+                // 顯示匯入成功的小提示
+                const msgEl = document.getElementById('importMsg');
+                msgEl.innerText = `✅ 已匯入: ${file.name}`;
+                msgEl.style.display = 'block';
             };
             reader.readAsArrayBuffer(file);
+            // 清空 value 讓同檔名可重複匯入
+            this.value = ''; 
         });
 
         function renderTable(data) {
@@ -154,7 +213,7 @@
                 if (rowIndex === 0) {
                     html += '<thead><tr>';
                     for(let i=0; i<4; i++) {
-                        let content = row[i] || (i===3 ? "已掃描" : "");
+                        let content = row[i] || (i===3 ? "已掃" : "");
                         html += `<th>${content}</th>`;
                     }
                     html += '</tr></thead><tbody>';
@@ -172,7 +231,7 @@
             document.getElementById('tableContainer').innerHTML = html;
         }
 
-        // 3. Quagga 掃描
+        // --- Quagga 相機控制 ---
         document.getElementById('toggleCameraBtn').addEventListener('click', function() {
             const viewport = document.getElementById('interactive');
             if (isCameraOn) {
@@ -216,19 +275,17 @@
 
         Quagga.onProcessed(function(result) {
             var drawingCtx = Quagga.canvas.ctx.overlay, drawingCanvas = Quagga.canvas.dom.overlay;
-            if (result) {
-                if (result.boxes) {
-                    drawingCtx.clearRect(0, 0, parseInt(drawingCanvas.getAttribute("width")), parseInt(drawingCanvas.getAttribute("height")));
-                    result.boxes.filter(box => box !== result.box).forEach(box => {
-                        Quagga.ImageDebug.drawPath(box, {x: 0, y: 1}, drawingCtx, {color: "green", lineWidth: 2});
-                    });
-                }
+            if (result && result.boxes) {
+                drawingCtx.clearRect(0, 0, parseInt(drawingCanvas.getAttribute("width")), parseInt(drawingCanvas.getAttribute("height")));
+                result.boxes.filter(box => box !== result.box).forEach(box => {
+                    Quagga.ImageDebug.drawPath(box, {x: 0, y: 1}, drawingCtx, {color: "green", lineWidth: 2});
+                });
                 if (result.box) Quagga.ImageDebug.drawPath(result.box, {x: 0, y: 1}, drawingCtx, {color: "#00F", lineWidth: 2});
                 if (result.codeResult && result.codeResult.code) Quagga.ImageDebug.drawPath(result.line, {x: 'x', y: 'y'}, drawingCtx, {color: 'red', lineWidth: 3});
             }
         });
 
-        // 4. 核對邏輯
+        // --- 核對邏輯 ---
         document.getElementById('checkBtn').addEventListener('click', () => performCheck(false));
         document.getElementById('scanInput').addEventListener('keypress', (e) => { 
             if (e.key === 'Enter') performCheck(false); 
@@ -266,7 +323,6 @@
                                 inputEl.value = ""; 
                                 return;
                             }
-                            
                             addQty = (userStr.trim() === "") ? 1 : parseFloat(userStr);
                             if (isNaN(addQty)) { alert("請輸入數字"); return; }
                             
@@ -275,20 +331,15 @@
                     }
                     
                     rows[i].scrollIntoView({behavior: "smooth", block: "center"});
-                    
-                    // 核對成功 -> 清空
                     inputEl.value = ""; 
                     if (!isFromCamera) inputEl.focus(); 
-                    
                     break;
                 }
             }
 
             if (!found) {
-                showStatus(`查無編號: ${inputVal}`, "bg-red");
-                // 修改處：核對失敗也自動清空輸入框，方便繼續輸入
+                showStatus(`查無: ${inputVal}`, "bg-red");
                 inputEl.value = "";
-                // 如果是手動輸入，重新對焦
                 if (!isFromCamera) inputEl.focus();
             }
         }
@@ -318,7 +369,4 @@
         }
     </script>
 </body>
-
 </html>
-
-
