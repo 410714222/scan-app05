@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Excel 盤點系統</title>
+    
+    <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+    <script src="https://unpkg.com/@ericblade/quagga2@1.8.4/dist/quagga.min.js"></script>
+
+    <style>
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, "Microsoft JhengHei", Roboto, sans-serif; 
+            padding: 15px; padding-top: 60px; background-color: #f0f2f5; margin: 0;
+            -webkit-overflow-scrolling: touch; 
+        }
+
+        /* 頂部導覽列 */
+        .top-bar {
+            position: fixed; top: 0; left: 0; width: 100%; height: 55px;
+            background-color: #fff; box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 0 15px; z-index: 1000;
+        }
+        .top-bar h1 { font-size: 1.1em; margin: 0; color: #333; }
+        .btn-export {
+            background-color: #17a2b8; color: white; border: none; padding: 8px 12px;
+            border-radius: 5px; font-size: 0.9em; cursor: pointer;
+        }
+
+        .control-panel { 
+            background: white; padding: 15px; border-radius: 12px; 
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1); margin-bottom: 15px; 
+        }
+        h2 { margin-top: 0; font-size: 1em; color: #666; border-bottom: 1px solid #eee; padding-bottom: 8px; margin-bottom: 10px;}
+
+        /* 表格區 */
+        #tableContainer {
+            overflow-x: auto; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            background: white; max-height: 55vh; overflow-y: auto;
+        }
+        table { width: 100%; border-collapse: collapse; white-space: nowrap; }
+        th, td { border: 1px solid #eee; padding: 12px 10px; text-align: center; font-size: 14px; }
+        th { background-color: #007bff; color: white; position: sticky; top: 0; z-index: 10; }
+        
+        td:nth-child(3) { font-weight: bold; color: #007bff; } 
+        td:nth-child(4) { font-weight: bold; color: #28a745; background-color: #f9fff9; }
+
+        /* 輸入與按鈕 */
+        input[type="text"], input[type="file"] { 
+            padding: 10px; border: 1px solid #ccc; border-radius: 6px; width: 100%; 
+            box-sizing: border-box; margin-bottom: 10px; font-size: 16px; 
+        }
+        .btn-action { 
+            padding: 12px; background-color: #28a745; color: white; border: none; 
+            border-radius: 8px; cursor: pointer; font-size: 16px; width: 100%; margin-bottom: 8px; 
+        }
+        #toggleCameraBtn { background-color: #6c757d; }
+        
+        .status-box { padding: 15px; font-weight: bold; border-radius: 8px; text-align: center; margin-top: 10px; display: none; }
+        .bg-gray { background-color: #d3d3d3 !important; color: #555; }
+        .bg-red { background-color: #ffebee !important; color: #c62828; }
+        .bg-yellow { background-color: #fffde7 !important; color: #f57f17; }
+
+        /* --- Quagga 掃描視窗 CSS 修改重點 --- */
+        #interactive.viewport {
+            position: relative; 
+            width: 100%; 
+            height: 180px; /* 固定高度，縮小視窗 */
+            overflow: hidden; /* 隱藏溢出的影像 */
+            text-align: center; 
+            display: none; 
+            margin-bottom: 10px;
+            background: #000; 
+            border-radius: 8px;
+        }
+        /* 讓影片垂直水平置中，保持畫面中心可見 */
+        #interactive.viewport > video, #interactive.viewport > canvas {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            min-width: 100%;
+            min-height: 100%;
+            width: auto;
+            height: auto;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="top-bar">
+        <h1>📦 盤點系統</h1>
+        <button id="exportBtn" class="btn-export">⬇ 匯出</button>
+    </div>
+
+    <div class="control-panel">
+        <h2>1. 匯入 Excel</h2>
+        <input type="file" id="fileInput" accept=".xlsx, .xls" />
+        <button id="importBtn" class="btn-action">匯入表格</button>
+        <p style="font-size: 0.8em; color: #888;"></p>
+    </div>
+
+    <div class="control-panel">
+        <h2>2. 掃描核對</h2>
+        
+        <button id="toggleCameraBtn" class="btn-action">📷 開啟相機</button>
+        
+        <div id="interactive" class="viewport"></div>
+
+        <input type="text" id="scanInput" placeholder="編號" inputmode="text" />
+        <button id="checkBtn" class="btn-action">核對</button>
+        <div id="resultMessage" class="status-box"></div>
+    </div>
+
+    <div id="tableContainer"></div>
+
+    <script>
+        let excelData = [];
+        let isCameraOn = false;
+        let lastScannedCode = "";
+        let lastScannedTime = 0;
+
+        // 1. 匯出
+        document.getElementById('exportBtn').addEventListener('click', function() {
+            const table = document.getElementById('dataTable');
+            if (!table) { alert("無資料"); return; }
+            const now = new Date();
+            const timeStr = `${now.getFullYear()}${(now.getMonth()+1).toString().padStart(2,'0')}${now.getDate().toString().padStart(2,'0')}_${now.getHours()}${now.getMinutes()}`;
+            const wb = XLSX.utils.table_to_book(table, {sheet: "盤點結果", raw: true});
+            XLSX.writeFile(wb, `盤點_${timeStr}.xlsx`);
+        });
+
+        // 2. 匯入
+        document.getElementById('importBtn').addEventListener('click', function() {
+            const fileInput = document.getElementById('fileInput');
+            const file = fileInput.files[0];
+            if (!file) { alert("請選擇檔案"); return; }
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const data = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(data, {type: 'array'});
+                const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+                excelData = XLSX.utils.sheet_to_json(worksheet, {header: 1});
+                renderTable(excelData);
+                showStatus("匯入成功", "bg-yellow");
+            };
+            reader.readAsArrayBuffer(file);
+        });
+
+        function renderTable(data) {
+            let html = '<table id="dataTable">';
+            data.forEach((row, rowIndex) => {
+                if (rowIndex === 0) {
+                    html += '<thead><tr>';
+                    for(let i=0; i<4; i++) {
+                        let content = row[i] || (i===3 ? "已掃描" : "");
+                        html += `<th>${content}</th>`;
+                    }
+                    html += '</tr></thead><tbody>';
+                } else {
+                    html += `<tr id="row-${rowIndex}">`;
+                    for(let i=0; i < 4; i++) {
+                        let val = row[i];
+                        if (i === 3 && (val === undefined || val === null || val === '')) val = 0;
+                        html += `<td contenteditable="${i!==3}">${val !== undefined ? val : ''}</td>`;
+                    }
+                    html += '</tr>';
+                }
+            });
+            html += '</tbody></table>';
+            document.getElementById('tableContainer').innerHTML = html;
+        }
+
+        // 3. Quagga 掃描
+        document.getElementById('toggleCameraBtn').addEventListener('click', function() {
+            const viewport = document.getElementById('interactive');
+            if (isCameraOn) {
+                Quagga.stop();
+                viewport.style.display = 'none';
+                isCameraOn = false;
+                this.innerText = "📷 開啟相機";
+                this.style.backgroundColor = "#6c757d";
+            } else {
+                viewport.style.display = 'block';
+                this.innerText = "❌ 關閉相機";
+                this.style.backgroundColor = "#dc3545";
+
+                Quagga.init({
+                    inputStream: {
+                        name: "Live", type: "LiveStream", target: document.querySelector('#interactive'),
+                        constraints: { facingMode: "environment", width: { min: 640 }, height: { min: 480 }, aspectRatio: { min: 1, max: 2 } }
+                    },
+                    decoder: {
+                        readers: ["code_128_reader", "ean_reader", "ean_8_reader", "code_39_reader", "upc_reader"]
+                    },
+                    locate: true
+                }, function(err) {
+                    if (err) { alert("相機錯誤: " + err); return; }
+                    Quagga.start();
+                    isCameraOn = true;
+                });
+            }
+        });
+
+        Quagga.onDetected(function(result) {
+            const code = result.codeResult.code;
+            const now = new Date().getTime();
+            if (code === lastScannedCode && (now - lastScannedTime < 1500)) return; 
+            lastScannedCode = code;
+            lastScannedTime = now;
+
+            document.getElementById('scanInput').value = code;
+            performCheck(true); 
+        });
+
+        Quagga.onProcessed(function(result) {
+            var drawingCtx = Quagga.canvas.ctx.overlay, drawingCanvas = Quagga.canvas.dom.overlay;
+            if (result) {
+                if (result.boxes) {
+                    drawingCtx.clearRect(0, 0, parseInt(drawingCanvas.getAttribute("width")), parseInt(drawingCanvas.getAttribute("height")));
+                    result.boxes.filter(box => box !== result.box).forEach(box => {
+                        Quagga.ImageDebug.drawPath(box, {x: 0, y: 1}, drawingCtx, {color: "green", lineWidth: 2});
+                    });
+                }
+                if (result.box) Quagga.ImageDebug.drawPath(result.box, {x: 0, y: 1}, drawingCtx, {color: "#00F", lineWidth: 2});
+                if (result.codeResult && result.codeResult.code) Quagga.ImageDebug.drawPath(result.line, {x: 'x', y: 'y'}, drawingCtx, {color: 'red', lineWidth: 3});
+            }
+        });
+
+        // 4. 核對邏輯
+        document.getElementById('checkBtn').addEventListener('click', () => performCheck(false));
+        document.getElementById('scanInput').addEventListener('keypress', (e) => { 
+            if (e.key === 'Enter') performCheck(false); 
+        });
+
+        function performCheck(isFromCamera) {
+            const inputEl = document.getElementById('scanInput');
+            const inputVal = inputEl.value.trim();
+            const table = document.getElementById('dataTable');
+
+            if (!table) { alert("請先匯入表格"); return; }
+            if (!inputVal) return;
+
+            const rows = table.getElementsByTagName('tr');
+            let found = false;
+
+            for (let i = 1; i < rows.length; i++) {
+                const cells = rows[i].getElementsByTagName('td');
+                const col1Value = cells[0].innerText.trim();
+                
+                if (col1Value == inputVal) {
+                    found = true;
+                    let targetQty = parseFloat(cells[2].innerText.trim()) || 0;
+                    let currentScanQty = parseFloat(cells[3].innerText.trim()) || 0;
+                    let addQty = 0;
+
+                    if (targetQty === 1) {
+                        addQty = 1;
+                        updateRow(rows[i], cells, currentScanQty, addQty, targetQty, col1Value);
+                    } else {
+                        setTimeout(() => {
+                            let userStr = prompt(`編號 ${col1Value}\n目標: ${targetQty} / 已掃: ${currentScanQty}\n請輸入增加數量:`, "");
+                            
+                            if (userStr === null) {
+                                inputEl.value = ""; 
+                                return;
+                            }
+                            
+                            addQty = (userStr.trim() === "") ? 1 : parseFloat(userStr);
+                            if (isNaN(addQty)) { alert("請輸入數字"); return; }
+                            
+                            updateRow(rows[i], cells, currentScanQty, addQty, targetQty, col1Value);
+                        }, 50);
+                    }
+                    
+                    rows[i].scrollIntoView({behavior: "smooth", block: "center"});
+                    
+                    // 核對成功 -> 清空
+                    inputEl.value = ""; 
+                    if (!isFromCamera) inputEl.focus(); 
+                    
+                    break;
+                }
+            }
+
+            if (!found) {
+                showStatus(`查無編號: ${inputVal}`, "bg-red");
+                // 修改處：核對失敗也自動清空輸入框，方便繼續輸入
+                inputEl.value = "";
+                // 如果是手動輸入，重新對焦
+                if (!isFromCamera) inputEl.focus();
+            }
+        }
+
+        function updateRow(row, cells, currentQty, addQty, targetQty, col1Id) {
+            let newTotal = currentQty + addQty;
+            cells[3].innerText = newTotal;
+            row.classList.remove('bg-gray', 'bg-red', 'bg-yellow');
+
+            if (newTotal === targetQty) {
+                row.classList.add('bg-gray');
+                showStatus(`✅ ${col1Id} 完成`, "bg-gray");
+            } else if (newTotal > targetQty) {
+                row.classList.add('bg-red');
+                showStatus(`❌ ${col1Id} 錯誤`, "bg-red");
+            } else {
+                row.classList.add('bg-yellow');
+                showStatus(`📦 ${col1Id} +${addQty}`, "bg-yellow");
+            }
+        }
+
+        function showStatus(text, cssClass) {
+            const msgBox = document.getElementById('resultMessage');
+            msgBox.innerText = text;
+            msgBox.className = "status-box " + cssClass;
+            msgBox.style.display = "block";
+        }
+    </script>
+</body>
+</html>
