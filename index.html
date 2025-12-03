@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Excel 極簡盤點 (固定表格版)</title>
+    <title>我是狗</title>
     
     <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
     <script src="https://unpkg.com/@ericblade/quagga2@1.8.4/dist/quagga.min.js"></script>
@@ -11,7 +11,7 @@
     <style>
         body { 
             font-family: -apple-system, BlinkMacSystemFont, "Microsoft JhengHei", Roboto, sans-serif; 
-            padding: 8px; /* 減少邊距 */
+            padding: 8px; 
             background-color: #f4f5f7; 
             margin: 0;
             -webkit-overflow-scrolling: touch; 
@@ -25,21 +25,22 @@
             margin-bottom: 8px; 
         }
 
-        /* 按鈕與輸入框佈局 */
+        /* 檔案控制區 */
         .flex-row { display: flex; gap: 8px; align-items: center; }
-        
         .btn-file {
             flex: 1; padding: 10px; border: none; border-radius: 6px;
             font-size: 14px; font-weight: bold; cursor: pointer; color: white; text-align: center;
         }
         #btn-import-trigger { background-color: #28a745; }
-        #btn-export { background-color: #17a2b8; }
+        #btn-export { background-color: #dc3545; } /* 改紅色，強調是匯出差異 */
 
+        /* 相機按鈕 */
         #toggleCameraBtn {
             width: 100%; padding: 10px; background-color: #6c757d; color: white;
             border: none; border-radius: 6px; font-size: 14px; margin-bottom: 8px; cursor: pointer;
         }
 
+        /* 輸入區塊 */
         .input-group { display: flex; gap: 5px; }
         #scanInput {
             flex: 1; padding: 8px; border: 1px solid #ccc; border-radius: 6px;
@@ -69,35 +70,22 @@
             min-width: 100%; min-height: 100%; width: auto; height: auto;
         }
 
-        /* --- 表格核心優化 CSS --- */
+        /* 表格固定佈局 */
         #tableContainer {
             background: white; 
             border-radius: 8px; 
             box-shadow: 0 1px 3px rgba(0,0,0,0.1);
             height: calc(100vh - 450px); 
-            overflow-y: auto; /* 只允許垂直捲動 */
-            overflow-x: hidden; /* 禁止水平捲動 */
+            overflow-y: auto; 
+            overflow-x: hidden;
         }
-        
         table { 
-            width: 100%; /* 寬度佔滿容器 */
-            table-layout: fixed; /* 強制固定佈局，不隨內容撐開 */
-            border-collapse: collapse; 
+            width: 100%; table-layout: fixed; border-collapse: collapse; 
         }
-
         th, td { 
-            border: 1px solid #eee; 
-            padding: 8px 4px; /* 減少內距以塞入更多字 */
-            text-align: center; 
-            font-size: 13px; /* 字體稍小 */
-            
-            /* 關鍵：強制換行 */
-            white-space: normal; 
-            word-wrap: break-word;
-            word-break: break-all; /* 確保長條碼或英文會折行 */
-            vertical-align: middle;
+            border: 1px solid #eee; padding: 8px 4px; text-align: center; font-size: 13px; 
+            white-space: normal; word-wrap: break-word; word-break: break-all; vertical-align: middle;
         }
-
         th { background-color: #007bff; color: white; position: sticky; top: 0; z-index: 10; }
         td:nth-child(3) { font-weight: bold; color: #007bff; } 
         td:nth-child(4) { font-weight: bold; color: #28a745; background-color: #f9fff9; }
@@ -114,7 +102,7 @@
                 📂 匯入
             </button>
             <button id="btn-export" class="btn-file">
-                ⬇ 匯出
+                ⚠ 匯出差異
             </button>
         </div>
         <div id="importMsg" style="font-size: 12px; color: #666; margin-top: 5px; text-align: center; display: none;"></div>
@@ -125,7 +113,7 @@
         <div id="interactive" class="viewport"></div>
 
         <div class="input-group">
-            <input type="text" id="scanInput" placeholder="輸入編號" inputmode="text" />
+            <input type="number" id="scanInput" placeholder="限輸入數字編號" inputmode="numeric" />
             <button id="checkBtn">核對</button>
         </div>
         <div id="resultMessage" class="status-box"></div>
@@ -139,15 +127,73 @@
         let lastScannedCode = "";
         let lastScannedTime = 0;
 
+        // --- 強制只能輸入數字的監聽器 ---
+        const scanInputEl = document.getElementById('scanInput');
+        scanInputEl.addEventListener('input', function() {
+            // 將非 0-9 的字元全部替換為空字串
+            this.value = this.value.replace(/[^0-9]/g, '');
+        });
+
+        // --- 匯出功能 (修正：只匯出差異) ---
         document.getElementById('btn-export').addEventListener('click', function() {
             const table = document.getElementById('dataTable');
             if (!table) { alert("無資料"); return; }
+            
+            // 1. 抓取表格所有列
+            const rows = table.querySelectorAll('tr');
+            let exportData = [];
+            let header = [];
+
+            // 2. 遍歷表格
+            rows.forEach((row, index) => {
+                const cells = row.querySelectorAll('th, td');
+                let rowData = [];
+                // 讀取該列所有格子的文字
+                cells.forEach(cell => {
+                    // 如果是 input/contenteditable，取 innerText
+                    rowData.push(cell.innerText); 
+                });
+
+                if (index === 0) {
+                    // 標題列：永遠保留
+                    header = rowData;
+                    exportData.push(rowData);
+                } else {
+                    // 內容列：進行比對
+                    // 假設第3欄是 index 2, 第4欄是 index 3
+                    // 將文字轉為數字進行比較 (避免 "10" 和 "10 " 不相等的情況)
+                    let target = parseFloat(rowData[2]); 
+                    let scanned = parseFloat(rowData[3]); 
+
+                    // 如果轉出來是 NaN (例如空字串)，視為 0
+                    if (isNaN(target)) target = 0;
+                    if (isNaN(scanned)) scanned = 0;
+
+                    // 核心邏輯：如果不相等，才加入匯出清單
+                    if (target !== scanned) {
+                        exportData.push(rowData);
+                    }
+                }
+            });
+
+            // 3. 檢查是否有差異資料
+            if (exportData.length <= 1) { // 只有標題列，代表全部正確
+                alert("恭喜！所有項目數量皆相符，沒有差異資料可匯出。");
+                return;
+            }
+
+            // 4. 產生 Excel
             const now = new Date();
             const timeStr = `${now.getFullYear()}${(now.getMonth()+1).toString().padStart(2,'0')}${now.getDate().toString().padStart(2,'0')}_${now.getHours()}${now.getMinutes()}`;
-            const wb = XLSX.utils.table_to_book(table, {sheet: "盤點結果", raw: true});
+            
+            // 使用 aoa_to_sheet (Array of Arrays)
+            const ws = XLSX.utils.aoa_to_sheet(exportData);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "差異結果");
             XLSX.writeFile(wb, `盤點_${timeStr}.xlsx`);
         });
 
+        // --- 匯入功能 ---
         document.getElementById('fileInput').addEventListener('change', function(e) {
             const file = e.target.files[0];
             if (!file) return;
@@ -172,8 +218,6 @@
             data.forEach((row, rowIndex) => {
                 if (rowIndex === 0) {
                     html += '<thead><tr>';
-                    // 為了確保4欄在手機上塞得下，這裡可以手動指定寬度比例 (Optional)
-                    // 但因為用了 table-layout: fixed，瀏覽器會平均分配，或者根據內容微調
                     for(let i=0; i<4; i++) {
                         let content = row[i] || (i===3 ? "已掃" : "");
                         html += `<th>${content}</th>`;
@@ -193,6 +237,7 @@
             document.getElementById('tableContainer').innerHTML = html;
         }
 
+        // --- 相機邏輯 ---
         document.getElementById('toggleCameraBtn').addEventListener('click', function() {
             const viewport = document.getElementById('interactive');
             if (isCameraOn) {
@@ -229,6 +274,9 @@
             if (code === lastScannedCode && (now - lastScannedTime < 1500)) return; 
             lastScannedCode = code;
             lastScannedTime = now;
+
+            // 確保掃到的也是數字 (有些條碼可能誤判)
+            if (!/^\d+$/.test(code)) return; 
 
             document.getElementById('scanInput').value = code;
             performCheck(true); 
@@ -277,15 +325,23 @@
                         updateRow(rows[i], cells, currentScanQty, addQty, targetQty, col1Value);
                     } else {
                         setTimeout(() => {
-                            let userStr = prompt(`編號 ${col1Value}\n目標: ${targetQty} / 已掃: ${currentScanQty}\n增加數量:`, "");
+                            let userStr = prompt(`編號 ${col1Value}\n目標: ${targetQty} / 已掃: ${currentScanQty}\n請輸入增加數量 (限數字):`, "");
                             
                             if (userStr === null) {
                                 inputEl.value = ""; 
                                 return;
                             }
-                            addQty = (userStr.trim() === "") ? 1 : parseFloat(userStr);
-                            if (isNaN(addQty)) { alert("請輸入數字"); return; }
                             
+                            // 修正：檢查輸入是否為純數字
+                            userStr = userStr.trim();
+                            if (!/^\d+$/.test(userStr)) {
+                                alert("錯誤！只能輸入數字。");
+                                inputEl.value = ""; // 清空輸入框
+                                if (!isFromCamera) inputEl.focus();
+                                return;
+                            }
+
+                            addQty = (userStr === "") ? 1 : parseFloat(userStr);
                             updateRow(rows[i], cells, currentScanQty, addQty, targetQty, col1Value);
                         }, 50);
                     }
@@ -298,7 +354,7 @@
             }
 
             if (!found) {
-                showStatus(`查無: ${inputVal}`, "bg-red");
+                showStatus(`查無編號: ${inputVal}`, "bg-red");
                 inputEl.value = "";
                 if (!isFromCamera) inputEl.focus();
             }
@@ -314,7 +370,7 @@
                 showStatus(`✅ ${col1Id} 完成`, "bg-gray");
             } else if (newTotal > targetQty) {
                 row.classList.add('bg-red');
-                showStatus(`❌ ${col1Id} 錯誤`, "bg-red");
+                showStatus(`❌ ${col1Id} 數量錯誤`, "bg-red");
             } else {
                 row.classList.add('bg-yellow');
                 showStatus(`📦 ${col1Id} +${addQty}`, "bg-yellow");
@@ -330,4 +386,3 @@
     </script>
 </body>
 </html>
-
